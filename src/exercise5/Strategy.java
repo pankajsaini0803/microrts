@@ -3,12 +3,10 @@ package exercise5;
 import ai.abstraction.pathfinding.PathFinding;
 import rts.*;
 import rts.units.Unit;
+import rts.units.UnitType;
 import rts.units.UnitTypeTable;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
 import static rts.UnitAction.*;
 
@@ -54,17 +52,24 @@ public class Strategy {
 
             //TODO 5a: Iterate through all the units from 'gs'
             //for (????) {
-            //TODO 5b: For each unit 'u', get its action assignment
-            //UnitActionAssignment uaa = ????
-
-            //TODO 5c: If the unit action assignment uaa is not null, gets its resource usage and merge it into 'pa'
-            //if (????) {
-            //ResourceUsage ru = uaa.action.resourceUsage(u, pgs); // This picks the usage of resources of unit 'u'
-            //pa.getResourceUsage().merge(ru);                     // This merges the resource usage into 'pa'
-            //}
-            //}
+            for (Unit u : gs.getUnits()) {
 
 
+                //TODO 5b: For each unit 'u', get its action assignment
+                //UnitActionAssignment uaa = ????
+                UnitActionAssignment uaa=gs.getActionAssignment(u);
+                //TODO 5c: If the unit action assignment uaa is not null, gets its resource usage and merge it into 'pa'
+                //if (????) {
+                //ResourceUsage ru = uaa.action.resourceUsage(u, pgs); // This picks the usage of resources of unit 'u'
+                //pa.getResourceUsage().merge(ru);                     // This merges the resource usage into 'pa'
+                //}
+                //}
+                if(uaa!=null){
+                    ResourceUsage ru = uaa.action.resourceUsage(u, pgs);
+                    pa.getResourceUsage().merge(ru);
+                }
+
+            }
             // We only have 1 worker to start with, find it and set this as active worker.
             if (activeWorker == null) {
                 for (Unit u : gs.getUnits()) {
@@ -114,26 +119,28 @@ public class Strategy {
                 //TODO 6a: Set actions for this unit only if: its controlling player is 'this', they have no action
                 //   assigned and they are not the activeWorker
 
-                if ( true /*  Contents from TODO 6a */ ) {
+                if ( u.getPlayer()==player && gs.getActionAssignment(u)==null && u!=activeWorker/*  Contents from TODO 6a */ ) {
 
                     List<UnitAction> availableActions;
 
                     //TODO 6b: Get the list of available actions for this unit and assign it to availableActions
-                    availableActions = null;
+                    availableActions = u.getUnitActions(gs);
 
                     UnitAction nextAction = null;
 
                     if (u.getType().canHarvest) { // This means this unit is a worker
                         //TODO 6c: Assign a random action from the available ones to 'nextAction'
                         // nextAction = ...
+                        nextAction= new UnitAction(TYPE_PRODUCE,DIRECTION_DOWN,utt.getUnitType("Worker"));
                     }
 
                     boolean barracksExist = gs.getPhysicalGameState().getUnitAt(4,4) != null;
                     //TODO 6d: Set the first available action for this unit only if the barracks exist and the unit is a building:
-                    if ( true /*  Contents from TODO 6d */ ) { // Buildings
+                    if ( barracksExist && (u.getType().name== "Barracks" || u.getType().name== "Base")/*  Contents from TODO 6d */ ) { // Buildings
 
                         //TODO 6e: Assign the first one from the available actions list to 'nextAction'
                         // nextAction = ...
+                        nextAction=u.getUnitActions(gs).get(0);
                     }
 
                     checkResourcesAndAddAction(nextAction, u, pa, gs);
@@ -162,6 +169,11 @@ public class Strategy {
             // return the resource to the base and be back at the original location (1,1).
             harvestActions.add(new UnitAction(TYPE_HARVEST, DIRECTION_LEFT));
             /// create and add more here
+            harvestActions.add(new UnitAction(TYPE_MOVE,DIRECTION_RIGHT));
+            harvestActions.add(new UnitAction(TYPE_RETURN,DIRECTION_DOWN));
+            harvestActions.add(new UnitAction(TYPE_MOVE,DIRECTION_LEFT));
+
+
         }
 
         // If there are pending actions, we have to pick one for this game tick.
@@ -172,8 +184,12 @@ public class Strategy {
             checkResourcesAndAddAction(nextAction, activeWorker, pa, gs);
         }
 
+
         //TODO 1b: Return true if all actions for harvesting have been assigned. Otherwise, return false;
-        return false;
+        if(harvestActions.isEmpty())
+            return true;
+        else
+            return false;
     }
 
 
@@ -193,15 +209,28 @@ public class Strategy {
             // moving to next to the desired location (4,4) and building a barracks there.
 
             // create and add actions here.
+            buildBarracksActions.add(new UnitAction(TYPE_MOVE,DIRECTION_RIGHT));
+            buildBarracksActions.add(new UnitAction(TYPE_MOVE,DIRECTION_RIGHT));
+            buildBarracksActions.add(new UnitAction(TYPE_MOVE,DIRECTION_DOWN));
+            buildBarracksActions.add(new UnitAction(TYPE_PRODUCE,DIRECTION_DOWN,utt.getUnitType("Barracks")));
+
+
         }
 
         // If there are pending actions, we have to pick one for this game tick.
         if (buildBarracksActions.size() != 0) {
             // TODO 2b: Pick and remove the next action from the list and assign it to the worker.
+            // We pick (and remove) the next action from the list of buildBarracksActions...
+            UnitAction nextAction = buildBarracksActions.remove(0);
+            // and assign the action to the unit checking resources
+            checkResourcesAndAddAction(nextAction, activeWorker, pa, gs);
         }
 
         //TODO 2c: Return true if this game cycles issues the last building barracks action. Otherwise, return false;
-        return false;
+        if(buildBarracksActions.isEmpty())
+            return true;
+        else
+            return false;
     }
 
     /**
@@ -216,19 +245,33 @@ public class Strategy {
         int numStepsForward = 200;
 
         //TODO 3a: Create a copy of the current game state.
-
+        GameState gsc=gs.clone();
         //TODO 3b: Issue the actions from pa in the copy of gs.
-
+        gsc.issue(pa);
         //TODO 3c: Advance the state numStepsForward ahead
+        while(numStepsForward>0) {
+            gsc.cycle();
+            numStepsForward--;
 
-
+        }
         int barracksCountNow = 0;
         int barracksCountThen = 0;
 
         //TODO 3d: Use the above counters to count the number of barracks before and after rolling the state forward.
+        for (Unit ut : gs.getUnits()) {
+            if(ut.getType().name=="Barracks"){
+                barracksCountNow++;
+            }
+        }
 
+        for (Unit ut : gs.getUnits()) {
+            if(ut.getType().name=="Barracks"){
+                barracksCountThen++;
+            }
+        }
         //TODO 3e: Print the number of barracks to confirm it was built before and after. Include the game tick for both cases.
-
+        System.out.println("Barracks count then: "+barracksCountThen+", Game Ticks: "+gs.getTime());
+        System.out.println("Barracks count now: "+barracksCountNow+", Game Ticks: "+gsc.getTime());
     }
 
     /**
@@ -247,6 +290,25 @@ public class Strategy {
         // TODO 4a: It's time to attack the closest enemy to your active worker. Find the closest opponent unit among all the units
         // belonging to the other player. You can use the function 'manhattanDistance' defined below to compute the distance between
         // two units.
+        List<Unit> unitList= gs.getUnits();
+
+        Integer min_manhattanDistance=null;
+        Iterator it=unitList.iterator();
+        while(it.hasNext()){
+            Unit ut= (Unit) it.next();
+            if(ut.getPlayer()==1)
+            {
+                int md=manhattanDistance(activeWorker,ut);;
+                if(min_manhattanDistance==null){
+                    min_manhattanDistance=md;
+                }
+                else if(min_manhattanDistance>md) {
+                    min_manhattanDistance = md;
+                    closestEnemy=ut;
+                }
+            }
+        }
+
 
         // If we found an enemy, attack them...
         if (closestEnemy != null) {
@@ -255,10 +317,16 @@ public class Strategy {
 
             // Attack if in range
 
-            if (true /* TODO 4b: change this to True if the opponent is in attack range of the active worker (hint: look for a function in Unit)  */) {
+            System.out.println("closest enemy: "+closestEnemy);
+            System.out.println("attack range: "+closestEnemy.getAttackRange());
+
+
+            if (min_manhattanDistance<=activeWorker.getAttackRange() /* TODO 4b: change this to True if the opponent is in attack range of the active worker (hint: look for a function in Unit)  */ ) {
 
                 // TODO 4c: assign an attack action, on the location of the enemy, to nextAction
+
                 // nextAction = ...
+                nextAction=new UnitAction(TYPE_ATTACK_LOCATION,closestEnemy.getX(),closestEnemy.getY());
 
             } else {
 
@@ -269,6 +337,7 @@ public class Strategy {
                 //  that findPathToPositionInRange (from Pathfinding) provides.
 
                 //nextAction = pf.findPathToPositionInRange(/* ... */);
+                nextAction = pf.findPathToPositionInRange(activeWorker, opponentFlatPosition,closestEnemy.getAttackRange(),gs,gs.getResourceUsage());
             }
 
             checkResourcesAndAddAction(nextAction, activeWorker, pa, gs);
@@ -335,3 +404,4 @@ public class Strategy {
         pa.addUnitAction(u, nextAction);
     }
 }
+
